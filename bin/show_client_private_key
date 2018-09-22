@@ -1,0 +1,4 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+openssl rsa -in client.key -passin pass:password -noout -text

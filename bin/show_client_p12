@@ -1,0 +1,4 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+keytool -list -v -keystore client.p12 -storepass password -storetype pkcs12

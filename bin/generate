@@ -1,0 +1,106 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# Remove any existing keys, certs etc...
+rm -f *.key *.crt *.csr *.pem *.p12 *.jks *.srl *.conf
+
+# Generate CA private key
+openssl genrsa -des3 -out ca.key -passout pass:password 2048 
+
+# Generate certificate for the CA
+openssl req -x509 -new -nodes -key ca.key -passin pass:password -sha256 -days 3650 -out ca.crt << EOF
+.
+.
+.
+.
+.
+test certificate authority
+.
+EOF
+
+# Generate server private key
+openssl genrsa -des3 -out server.key -passout pass:password 2048
+
+# Generate server conf file
+cat > server.conf << EOF
+basicConstraints = CA:FALSE
+nsCertType = server
+nsComment = "Self-signed Server Certificate"
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer:always
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName=@alt_names
+
+[alt_names]
+DNS.1 = localhost
+DNS.2 = 127.0.0.1
+EOF
+
+# Generate certificate signing request
+openssl req -new -key server.key -passin pass:password -out server.csr << EOF
+.
+.
+.
+.
+.
+localhost
+.
+password
+EOF
+
+# Generate signed server certificate
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -passin pass:password -days 3650 -sha256 -out server.crt -extfile server.conf
+
+# Generate client private key
+openssl genrsa -des3 -out client.key -passout pass:password 2048
+
+# Generate client conf file
+cat > client.conf << EOF
+basicConstraints = CA:FALSE
+nsCertType = client, email
+nsComment = "OpenSSL Generated Client Certificate"
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth, emailProtection
+EOF
+
+# Generate client signing request
+openssl req -new -key client.key -passin pass:password -out client.csr << EOF
+.
+.
+.
+.
+.
+.
+client
+.
+password
+EOF
+
+# Generate signed client certificate
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -passin pass:password -days 3650 -sha256 -out client.crt -extfile client.conf
+
+# Verify certs are valid according to the CA
+openssl verify -CAfile ca.crt server.crt
+openssl verify -CAfile ca.crt client.crt
+
+# Generate server PKCS12 
+openssl pkcs12 -export -inkey server.key -in server.crt -passin pass:password -passout pass:password -out server.p12
+
+# Generate client PKCS12 
+openssl pkcs12 -export -inkey client.key -in client.crt -passin pass:password -passout pass:password -out client.p12
+
+# Create truststore in JKS format
+keytool -import -storepass password -noprompt -alias ca -file ca.crt -keystore truststore.jks
+cp truststore.jks truststore_all.jks
+keytool -import -storepass password -noprompt -alias server -file server.crt -keystore truststore_all.jks
+keytool -import -storepass password -noprompt -alias client -file client.crt -keystore truststore_all.jks
+
+# Remove unncessary files
+rm -f *.conf *.srl *.csr
+
+echo "Your files have been generated"
+ls *.key *.crt *.p12 *.jks
